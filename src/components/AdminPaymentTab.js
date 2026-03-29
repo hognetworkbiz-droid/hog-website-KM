@@ -1,94 +1,50 @@
 import React, { useState } from 'react';
-import { useAppState } from '../hooks/useAppState';
+import { approveAdminPayment } from '../services/api';
 
 function AdminPaymentTab({ appState, showToast }) {
-  const [whatsappNumber, setWhatsappNumber] = useState(appState.whatsAppNumber);
-  const [bankName, setBankName] = useState(appState.manualPayment.bankName);
-  const [accountNumber, setAccountNumber] = useState(appState.manualPayment.accountNumber);
-  const [accountName, setAccountName] = useState(appState.manualPayment.accountName);
-  const { updateSettings } = useAppState();
+  const [payments, setPayments] = useState(appState.pendingPayments || []);
+  const [loadingId, setLoadingId] = useState(null);
 
-  const handleContactSave = (e) => {
-    e.preventDefault();
-    updateSettings({ whatsAppNumber: whatsappNumber });
-    showToast('Contact info saved!');
-  };
-
-  const handlePaymentSave = (e) => {
-    e.preventDefault();
-    updateSettings({
-      manualPayment: { bankName, accountNumber, accountName }
-    });
-    showToast('Manual payment details saved!');
+  const handleApprove = async (payment, index) => {
+    setLoadingId(index);
+    try {
+      // Send plan data so the backend knows what kind of voucher to generate
+      const planData = { planLimitMB: 20480, durationMinutes: 43200 }; // Example: 20GB, 30 days. You should map this to the actual plan selected.
+      
+      const response = await approveAdminPayment(payment.id, planData);
+      
+      showToast(`Success! Generated OC300 Voucher: ${response.data.voucherCode}`);
+      
+      // Remove from pending list
+      setPayments(payments.filter((_, i) => i !== index));
+    } catch (error) {
+      showToast('Error approving payment or connecting to OC300.');
+    }
+    setLoadingId(null);
   };
 
   return (
-    <div className="space-y-8">
-      {/* Contact Form */}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-white">Admin Contact</h2>
-        <form onSubmit={handleContactSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">WhatsApp Number</label>
-            <input
-              type="text"
-              value={whatsappNumber}
-              onChange={(e) => setWhatsappNumber(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full px-5 py-2 border border-transparent font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Save Contact
-          </button>
-        </form>
-      </div>
-
-      {/* Manual Payment Form */}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-white">Manual Payment Details</h2>
-        <form onSubmit={handlePaymentSave} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Bank Name</label>
-            <input
-              type="text"
-              value={bankName}
-              onChange={(e) => setBankName(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Account Number</label>
-            <input
-              type="text"
-              value={accountNumber}
-              onChange={(e) => setAccountNumber(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Account Name</label>
-            <input
-              type="text"
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full px-5 py-2 border border-transparent font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Save Payment Details
-          </button>
-        </form>
-      </div>
+    <div className="bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
+      <h2 className="text-xl font-semibold mb-4 text-white">Pending Manual Payments</h2>
+      {payments.length === 0 ? <p className="text-gray-400">No pending payments.</p> : (
+        <div className="space-y-4">
+          {payments.map((payment, index) => (
+            <div key={index} className="p-4 bg-gray-900 rounded-lg flex justify-between items-center">
+              <div>
+                <p className="font-bold text-white">{payment.customerName} - ₦{payment.amount}</p>
+                <p className="text-sm text-gray-400">Plan: {payment.planName}</p>
+              </div>
+              <button 
+                onClick={() => handleApprove(payment, index)} 
+                disabled={loadingId === index}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                {loadingId === index ? 'Generating...' : 'Approve & Generate Voucher'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
