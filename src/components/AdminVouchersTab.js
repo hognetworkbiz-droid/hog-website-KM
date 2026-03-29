@@ -1,88 +1,63 @@
-import React, { useState } from 'react';
-import { useAppState } from '../hooks/useAppState';
+import React, { useState, useEffect } from 'react';
+import api from '../services/api';
 
 function AdminVouchersTab({ appState, showToast }) {
-  const [selectedPlan, setSelectedPlan] = useState('');
-  const [codes, setCodes] = useState('');
-  const { appState: state, updateSettings } = useAppState();
+  const [vouchers, setVouchers] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    if (!selectedPlan || !codes.trim()) {
-      showToast('Please select plan and enter codes');
-      return;
+  // Grab Vouchers from the OC300 (Via Backend)
+  const fetchVouchers = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/admin/vouchers');
+      setVouchers(response.data || []);
+      showToast('Vouchers synced directly from OC300!');
+    } catch (error) {
+      showToast('Backend Error: Could not sync with OC300.');
     }
+    setLoading(false);
+  };
 
-    const voucherList = codes
-      .split('\n')
-      .map(c => c.trim())
-      .filter(c => c)
-      .map(code => ({
-        code,
-        plan: selectedPlan,
-        used: false
-      }));
-
-    const updatedVouchers = [...state.vouchers, ...voucherList];
-    updateSettings({ vouchers: updatedVouchers });
-    
-    showToast(`${voucherList.length} vouchers added for ${selectedPlan}`);
-    setCodes('');
-    setSelectedPlan('');
+  // Delete Voucher from OC300
+  const handleDelete = async (voucherId) => {
+    if(window.confirm('Are you sure you want to delete this voucher permanently?')) {
+      try {
+        await api.delete(`/admin/vouchers/${voucherId}`);
+        setVouchers(vouchers.filter(v => v.id !== voucherId));
+        showToast('Voucher deleted from OC300!');
+      } catch (error) {
+        showToast('Failed to delete voucher.');
+      }
+    }
   };
 
   return (
     <div className="space-y-8">
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-white">Manage Voucher Codes</h2>
-        <p className="text-sm text-gray-400 mb-3">Enter one voucher code per line and select the associated data plan.</p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Select Plan</label>
-            <select
-              value={selectedPlan}
-              onChange={(e) => setSelectedPlan(e.target.value)}
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            >
-              <option value="">Choose a plan</option>
-              {appState.dataPlans.map((plan, i) => (
-                <option key={i} value={plan.data}>
-                  {plan.data}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300">Voucher Codes</label>
-            <textarea
-              value={codes}
-              onChange={(e) => setCodes(e.target.value)}
-              placeholder="Enter codes (one per line)"
-              rows="6"
-              required
-              className="mt-1 block w-full px-3 py-2 border border-gray-600 rounded-lg bg-gray-700 text-white"
-            />
-          </div>
-
-          <button
-            type="submit"
-            className="w-full px-5 py-2 border border-transparent font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Add Vouchers
-          </button>
-        </form>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md flex justify-between items-center">
+        <h2 className="text-xl font-semibold text-white">Manage OC300 Vouchers</h2>
+        <button onClick={fetchVouchers} disabled={loading} className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+          {loading ? 'Syncing...' : 'Sync from OC300'}
+        </button>
       </div>
 
-      {/* Vouchers List */}
-      <div className="bg-gray-800 p-6 rounded-lg shadow-md">
-        <h2 className="text-xl font-semibold mb-4 text-white">Available Vouchers</h2>
-        <div className="text-sm text-gray-400">
-          Total: {state.vouchers.length} | Used: {state.vouchers.filter(v => v.used).length} | Available: {state.vouchers.filter(v => !v.used).length}
-        </div>
+      <div className="bg-gray-800 p-6 rounded-lg shadow-md border border-gray-700">
+        {vouchers.length === 0 ? (
+          <p className="text-gray-400">No vouchers grabbed yet. Click Sync.</p>
+        ) : (
+          <div className="space-y-4">
+             {vouchers.map((voucher, index) => (
+              <div key={index} className="p-4 bg-gray-900 rounded-lg flex justify-between items-center">
+                <div>
+                  <p className="text-lg font-bold text-blue-400">Code: {voucher.code}</p>
+                  <p className="text-sm text-gray-400">Plan: {voucher.dataLimit} | Status: {voucher.status}</p>
+                </div>
+                <button onClick={() => handleDelete(voucher.id)} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                  Delete
+                </button>
+              </div>
+             ))}
+          </div>
+        )}
       </div>
     </div>
   );
